@@ -1,0 +1,12 @@
+digraph {
+	graph [label=nx_to_grpahviz]
+	T0_init [label=T0_init color=blue peripheries=1 shape=circle]
+	T0_S0 [label=T0_S0 color=black peripheries=1 shape=circle]
+	accept_all [label=accept_all color=red peripheries=2 shape=circle]
+	T0_init -> T0_S0 [label="(t11) && (!(t12))"]
+	T0_init -> T0_init [label="!(t11)"]
+	T0_init -> accept_all [label="(t11) && (t12)"]
+	T0_S0 -> T0_S0 [label="!(t12)"]
+	T0_S0 -> accept_all [label=t12]
+	accept_all -> accept_all [label=1]
+}
