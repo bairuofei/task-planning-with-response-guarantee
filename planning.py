@@ -77,6 +77,9 @@ def ltl_formula_to_ba(formula):
     return graph, init_nodes, accept_nodes
 
 
+
+
+
 def show_BA(graph, show=True, title="nx_to_grpahviz"):
     ret = Graph()
     ret.title(title)
@@ -436,6 +439,7 @@ if __name__ == "__main__":
         print(ts_node)
         real_path2.append(ts.nodes[ts_node]["pos"])
         
+    # animation
     grid_map(m, n, real_path1, obs, tasks, servs, save_name = "min-cost-path")
     grid_map(m, n, real_path2, obs, tasks, servs, save_name = "multi-obj-path")
     
