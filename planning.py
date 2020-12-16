@@ -2,6 +2,7 @@
 
 import spot
 import re
+import time
 from graphviz import Digraph
 import networkx as nx
 import heapq
@@ -175,12 +176,12 @@ def can_transit(label: str, aps: list, pre_require = None) -> bool:
     
     
 
-def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_nodes: list):
-    
-#    bfs
-#    ba_node -> {next_ba}
-#    ts_node -> {next_ts}
-#    check: |next_ba| * |next_ts|
+def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_nodes: list, init_pos = None):
+    """
+    bfs
+    ba_node -> {next_ba}
+    ts_node -> {next_ts}
+    check: |next_ba| * |next_ts|"""
     
     # preprocessing
     label_require = {}
@@ -191,8 +192,11 @@ def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_n
     pa_init, pa_accept = [], []
     queue = []
     for ba_node in init_nodes:
-        for ts_node in list(ts.nodes()):
-            queue.append([ts_node, ba_node])
+        if init_pos == None:  # decide init state of PA w.r.t actual init pos of robot
+            for ts_node in list(ts.nodes()):
+                queue.append([ts_node, ba_node])
+        else:
+            queue.append([str(init_pos), ba_node])
     visited = set()
     while queue:
         new_queue = []
@@ -219,14 +223,10 @@ def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_n
                 label = ba[ba_pre][ba_suf]["label"]
                 for ts_suf in next_ts:
                     success = ts_suf + "+" + ba_suf
-#                    if success in visited:
-#                        # considering self-loop and graph-loop
-#                        pa.add_edge(cur, success, weight = ts[ts_pre][ts_suf]["weight"], 
-#                                    label = ba[ba_pre][ba_suf]["label"])
-#                        continue
                     if can_transit(label, ts.nodes[ts_suf]["label"], pre_require = label_require[label]):
                         if success not in visited:
                             new_queue.append([ts_suf, ba_suf])
+                        # considering loop, so success will be add to edge even it is in visited
                         pa.add_edge(cur, success, weight = ts[ts_pre][ts_suf]["weight"], 
                                     label = ba[ba_pre][ba_suf]["label"])
         queue = new_queue
@@ -358,10 +358,22 @@ if __name__ == "__main__":
     belta = 0.5 # weight of response dist versus sum of reponse dist
 
     ## environment setting
-    m, n = 10, 12
-    obs = [(2, 3), (3, 3), (4, 3), (5, 3)]
-    tasks = [[3, 2, "t11"], [3, 11, "t12"]]
-    servs = [[6, 7, "s1"], [6, 8, "s2"], [5, 6, "s3"]]
+    m, n = 30, 30
+    # hronzital
+    obs = [(10, 10+i) for i in range(4)]
+    obs += [(10, 16+i) for i in range(4)]
+    obs += [(19, 10+i) for i in range(4)]
+    obs += [(19, 16+i) for i in range(4)]
+    # vertical
+    obs += [(11+i, 10) for i in range(3)]
+    obs += [(16+i, 10) for i in range(3)]    
+    obs += [(11+i, 19) for i in range(3)]
+    obs += [(16+i, 19) for i in range(3)]
+    tasks = [[0, 0, "t1"], [1, 7, "t2"], [7, 3, "t3"], [5, 11, "t4"],
+             [20, 0, "t5"], [21, 7, "t6"], [27, 3, "t7"], [25, 11, "t8"],
+             [0, 20, "t9"], [1, 27, "t10"], [7, 23, "t11"], [5, 29, "t12"],
+             [20, 20, "t13"], [21, 27, "t14"], [27, 23, "t15"], [25, 28, "t16"]]
+    servs = [[6, 9, "s1"], [6, 8, "s2"], [5, 6, "s3"]]
     grid = [[[] for _ in range(n)] for _ in range(m)]  
     for x, y in obs:
         grid[x][y].append("obs")
@@ -370,18 +382,25 @@ if __name__ == "__main__":
     for x, y, ap in servs:
         grid[x][y].append(ap)
     
+    T_start = time.time()
+    
     ## environment transition system
     ts = grid2map(grid)
 #    show_ts(ts)
 
     ## local task specification
-    formula = '(F(t11 && (F t12)))'
+    formula = '(F(t1 && (F t2))) && (F t12) && (F t9) && (F t6) && (F t16)'
+    # formula = "(<>e_z) && (<>e_s) && (<>e_k) && (<>e_b) && (<>e_g) && (<>e_r) && (<>e_y) && (<>e_l) && (<>e_gz) && (<>e_p) && (<>e_m) && (<>e_l) && (<>e_pg) && (<>e_n)"
     ba, init_nodes, accept_nodes = ltl_formula_to_ba(formula)
 #    show_BA(ba)
+    
+    T_ts_ba = time.time()
     
     ## product automaton
     pa, pa_init, pa_accept = product_automaton(ts, ba, init_nodes, accept_nodes)
 #    show_BA(pa, show=True, title="product automaton")
+    
+    T_pa = time.time()
     
     ## preprocessing: calcute distance to service locs
     service_loc = []
@@ -413,7 +432,11 @@ if __name__ == "__main__":
             source.append(init)
         
     ## min-cost path search
+    # TODO: 这里可以对pa_accept进行缩减，只保留task的位置对应的accept状态
     min_cost, path = optimal_path(pa, source, pa_accept)
+    
+    T_search = time.time()
+    
     # plot results
     print(min_cost)
     real_path1 = []
@@ -439,6 +462,8 @@ if __name__ == "__main__":
         print(ts_node)
         real_path2.append(ts.nodes[ts_node]["pos"])
         
+    print(T_ts_ba-T_start, T_pa - T_ts_ba, T_search - T_pa)
+    
     # animation
     grid_map(m, n, real_path1, obs, tasks, servs, save_name = "min-cost-path")
     grid_map(m, n, real_path2, obs, tasks, servs, save_name = "multi-obj-path")
