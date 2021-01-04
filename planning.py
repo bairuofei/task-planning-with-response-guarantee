@@ -162,7 +162,7 @@ def extract_transition(label: str):
     return require
 
 def can_transit(label: str, aps: list, pre_require = None) -> bool:
-    # can speed up by preprocessing
+    # can speed up by preprocessing. require: dic of dic
     require = extract_transition(label) if pre_require==None else pre_require
     aps_set = set(aps)
     for key in require.keys():
@@ -186,7 +186,7 @@ def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_n
     # preprocessing
     label_require = {}
     for start, end, label in list(ba.edges.data("label")):
-        label_require[label] = extract_transition(label)
+        label_require[label] = extract_transition(label) # dic(dic)
 
     pa = nx.DiGraph()
     pa_init, pa_accept = [], []
@@ -228,7 +228,7 @@ def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_n
                             new_queue.append([ts_suf, ba_suf])
                         # considering loop, so success will be add to edge even it is in visited
                         pa.add_edge(cur, success, weight = ts[ts_pre][ts_suf]["weight"], 
-                                    label = ba[ba_pre][ba_suf]["label"])
+                                    label = ba[ba_pre][ba_suf]["label"])                                                                                                                                                                                                                                                                                                                                                                                                                                  
         queue = new_queue
     return pa, pa_init, pa_accept
 

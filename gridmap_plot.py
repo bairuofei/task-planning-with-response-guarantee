@@ -84,9 +84,9 @@ def animate_path(m: int, n: int, path_list: list, alloc: list, task_cap: dict, o
     ax.set_yticks(y_pos, y_labels)
     for x, y, label in tasks:
         ax.text(y+0.2, x+0.2, label)
-    for x, y, label in servs:
-        ax.text(y+0.2, x+0.2, label+" "+str(task_cap[label]))
     ex_text_len = len(ax.texts)
+    # for x, y, label in servs:
+    #     ax.text(y+0.2, x+0.2, label+" "+str(task_cap[label]))   
     idx = [0 for _ in range(nrobot)]
     sum_path_len = sum([len(path) for path in path_list])
     wait_flag = [False for _ in range(nrobot)]
@@ -119,12 +119,15 @@ def animate_path(m: int, n: int, path_list: list, alloc: list, task_cap: dict, o
                     idx[k] += 1
             else:
                 idx[k] += 1
+      
         _ = ax.pcolormesh(data, cmap=cmap, edgecolors='k',
                           linewidths=1.5, alpha=0.6)  # as one collection
+        for x_s, y_s, label in servs:
+            ax.text(y_s+0.2, x_s+0.2, label+" "+str(task_cap[label])) 
         ax.text(n-1, m-1, s="Time: " + str(cnt), fontsize = 20)
         cnt += 1
-        print(alloc)
-        print(task_cap)
+        # print(alloc)
+        # print(task_cap)
         plt.show()
         plt.pause(0.8)
         if sum(idx) != sum_path_len:
