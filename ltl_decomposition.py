@@ -5,6 +5,7 @@ from z3 import *
 from collections import deque, defaultdict
 import time
 import copy
+import random
 
 from gridmap_plot import *
 from planning import *
@@ -33,10 +34,10 @@ def trace_accept(trace: list, ba, init_nodes: list, accept_nodes: list) -> bool:
                 continue
             visited.add(cur)
             for node in list(ba[cur]):
-                #                print(cur, node)
+                # print(cur, node)
                 label = ba[cur][node]["label"]
                 if can_transit(label, cur_ap):
-                    #                    print(can_transit(label, cur_ap), label, cur_ap, cur, node)
+                    # print(can_transit(label, cur_ap), label, cur_ap, cur, node)
                     new_queue.append(node)
         queue = new_queue
 
@@ -285,7 +286,8 @@ def optimal_path_tree(graph, source, target):
     return min_cost, path
 
 
-def iteration(num_r: int, local_formula: list, coor_formula: list, ts: nx.DiGraph, init_pos: list):
+def iteration(num_r: int, local_formula: list, coor_formula: list,
+              ts: nx.DiGraph, init_pos: list):
     """return a list of list, containing [min_cost, real_path]"""
     path_cost = []
     pa_dict = {}
@@ -323,7 +325,7 @@ def iteration(num_r: int, local_formula: list, coor_formula: list, ts: nx.DiGrap
         print(f"Time Used: {time.time()-TIME_start}s.")
         print("---------------------------------------------")
         # animation: real_path is a list of real_path
-        # grid_map(m, n, real_path, obs, tasks_collection, coor_tasks, save_name = "min-cost-path")
+        # grid_map(env, real_path, save_name = "min-cost-path")
     return path_cost, pa_dict
 
 
@@ -355,13 +357,15 @@ def construct_formula(alloc):
     return coor_formula
 
 
-def cand_check(pa, start, cand, accept, prev_time, max_time, new_path, ts,
-               s_pos, cost, alloc, idxs, task_order, twist_task, sums_time, j):
+def cand_check(pa, start, cand, accept, prev_time, cur_max, new_path, ts,
+               s_pos, old_cost, alloc, old_idxs, task_order, twist_task, end_sum, j):
+    """from all nodes in cand, find one cand that can form better path.
+       compare with: 1. cur_max; 2. end_sum"""
     for init in start:
         try:
             short_cost = nx.shortest_path_length(pa, init, weight="weight")
             for new in cand:
-                if new not in short_cost or short_cost[new] + prev_time >= max_time:
+                if new not in short_cost or short_cost[new] + prev_time >= cur_max:
                     continue
                 tail1 = nx.shortest_path(pa, init, new, weight="weight")
                 if cand in accept:
@@ -377,29 +381,33 @@ def cand_check(pa, start, cand, accept, prev_time, max_time, new_path, ts,
                             min_ac = ac
                     tail2 = suf_path[min_ac]
                     new_path1 = new_path + tail1 + tail2[1:]
-                if cand_is_better(pa, ts, new_path1, s_pos, cost, alloc, idxs, task_order, twist_task, sums_time, j):
-                    return True, new_path1
+                if cand_is_better(pa, ts, new_path1, s_pos, old_cost, alloc,
+                                  old_idxs, task_order, twist_task, end_sum, j):
+                    new_path += tail1 + tail2[1:]
+                    return True
         except nx.NetworkXNoPath:
             continue
     # do not exist better
-    return False, new_path
+    return False
 
 
-def cand_is_better(pa, ts, new_path, s_pos, cost, alloc, idxs, task_order, twist_task, sums_time, j):
+def cand_is_better(pa, ts, new_path, s_pos, old_cost, alloc, old_idxs, task_order,
+                   twist_task, end_sum, j):
     idx = find_exec_idx(pa, ts, new_path, alloc[j], s_pos)
-    test_idxs = copy.deepcopy(idxs)
-    test_cost = copy.deepcopy(cost)
+    test_idxs = copy.deepcopy(old_idxs)
+    test_cost = copy.deepcopy(old_cost)
     # print(new_path)
-    cost[j] = compute_path_cost(pa, new_path)
+    test_cost[j] = compute_path_cost(pa, new_path)
     if idx != None:
         test_idxs[j] = idx
     else:
         print("Error when finding exec node in plan!")
     end_time, exec_time = compute_finish_time(
-        cost, alloc, test_idxs, task_order, twist_task)
-    if sum(end_time) <= sums_time:
+        test_cost, test_idxs, alloc, task_order, twist_task)
+    if sum(end_time) <= end_sum:
+        print("Better Cand", sum(end_time), end_sum)
         return True
-    print("haha", sum(end_time), sums_time)
+    print("Worse Cand", sum(end_time), end_sum)
     return False
 
 
@@ -418,29 +426,33 @@ def compute_path_cost(pa, path):
     return cost
 
 
-def optimise_time(pa_path_list, pa_dict, ts, cost, alloc, task_order, twist_task, s_pos):
+def optimise_time(pa_path_list, pa_dict, ts, cost, alloc, task_order,
+                  twist_task, s_pos):
     idxs = []
     for i, path in enumerate(pa_path_list):
-        r_task = alloc[i]
         pa = pa_dict[i][0]
-        idx = find_exec_idx(pa, ts, path, r_task, s_pos)
+        idx = find_exec_idx(pa, ts, path, alloc[i], s_pos)
         if idx != None:
             idxs.append(idx)
         else:
             print("Error when finding exec node in plan!")
     # exec_time: each step record given last step(considering synchronization), compute current step execution time for each robot
     end_time, exec_time = compute_finish_time(
-        cost, alloc, idxs, task_order, twist_task)
+        cost, idxs, alloc, task_order, twist_task)
     all_pa_exec = []
     for i, pa_list in pa_dict.items():
         pa = pa_list[0]
         all_pa_exec.append(find_exec_node(pa, ts, s_pos, alloc[i]))
 
+    # iterating over: cost, idxs, pa_path_list, end_time, exec_time
     stop = [False for _ in range(len(task_order))]
     i = 0
     while True:
+        if stop[i]:
+            i += 1
+            continue
         t = task_order[i]
-        j = exec_time[i].index(max(exec_time[i]))  # slowest robot
+        j = exec_time[i].index(max(exec_time[i]))  # slowest robot idx
         # considering twist task and get the actual task name
         if t in twist_task and t not in alloc[j]:
             for t_twist in twist_task[t]:
@@ -452,24 +464,17 @@ def optimise_time(pa_path_list, pa_dict, ts, cost, alloc, task_order, twist_task
         start = [path[0]]
         # dict of sets of exec nodes for each alloced task
         pa_exec = all_pa_exec[j]
-        cand = pa_exec[t]
+        cand = copy.deepcopy(pa_exec[t]) # set
         prev_time = 0
-        max_time = exec_time[i][j]
-        sums_time = sum(end_time)
+        cur_max = exec_time[i][j]
+        end_sum = sum(end_time)
         new_path = []
         k = alloc[j].index(t)  # currently modified c_task idx
         cur = path[idxs[j][k]]
-        # print(cur, cand)
         try:
             cand.remove(cur)
         except:
-            print(cur, cand)
-            print(path)
-            print(idxs[j])
-            print(t)
-            print(k)
-            print("haha")
-            return
+            assert False
 
         if k > 0:
             path = pa_path_list[j]
@@ -480,17 +485,20 @@ def optimise_time(pa_path_list, pa_dict, ts, cost, alloc, task_order, twist_task
             prev_time = exec_time[task_order.index(p_t)][j]
             new_path += path[:idxs[j][k-1]+1]
             start = [prev]
-        # given: start(list),accept(list),cand(list), find feasible node in cand
-        can_opt, new_path = cand_check(pa, start, cand, pa_accept, prev_time, max_time, new_path, ts,
-                                       s_pos, cost, alloc, idxs, task_order, twist_task, sums_time, j)
-        if can_opt:
+        # add the newly cand path into new_path list
+        can_opt = cand_check(pa, start, cand, pa_accept, prev_time,
+                             cur_max, new_path, ts, s_pos, cost,
+                             alloc, idxs, task_order, twist_task,
+                             end_sum, j)
+        if can_opt:  # find a feasible new path for robot j
+            print(path)
+            print(new_path)
             pa_path_list[j] = new_path
-            # renew cost, idxs, exectime
             cost[j] = compute_path_cost(pa, new_path)
             idx = find_exec_idx(pa, ts, new_path, alloc[j], s_pos)
             idxs[j] = idx
             end_time, exec_time = compute_finish_time(
-                cost, alloc, idxs, task_order, twist_task)
+                cost, idxs, alloc, task_order, twist_task)
         else:
             if i == 0 or stop[i-1] == True:
                 stop[i] = True
@@ -503,19 +511,94 @@ def optimise_time(pa_path_list, pa_dict, ts, cost, alloc, task_order, twist_task
     return sum(end_time), end_time
 
 
+class SmtObj:
+    def __init__(self):
+        self.s = Solver()
+
+    def add_constraint(self, cons):
+        self.s.add(cons)
+
+    def add_constraints(self, cons_list):
+        for cons in cons_list:
+            self.s.add(cons)
+
+    def check(self):
+        return self.s.check()
+
+    def model(self):
+        return self.s.model()
+
+    def add_task_cons(self, tasks, num_r):
+        self.X = [[[[Int("x_%i_%i_%i_%i" % (i, j, k, l)) for l in range(len(tasks[j][k]))]
+                    for k in range(len(tasks[j]))]
+                   for j in range(len(tasks))]
+                  for i in range(num_r)]
+        self.val_c = [And(0 <= self.X[i][j][k][l], self.X[i][j][k][l] <= 1) for i in range(num_r)
+                      for j in range(len(tasks)) for k in range(len(tasks[j]))
+                      for l in range(len(tasks[j][k]))]
+        self.task_c = [sum([self.X[i][j][k][l] for i in range(num_r)]) >= task_cap[tasks[j][k][l]]
+                       for j in range(len(tasks)) for k in range(len(tasks[j]))
+                       for l in range(len(tasks[j][k]))]
+        self.mutual_c = [sum([self.X[i][j][k][l] for l in range(len(tasks[j][k]))]) <= 1 for i in range(num_r)
+                         for j in range(len(tasks)) for k in range(len(tasks[j]))]
+        self.connect_c = [Or([Implies(Or([self.X[i][j][k][l] == 1 for l in range(len(tasks[j][k]))]),
+                                      Or([self.X[i][j][k+1][l] == 1 for l in range(len(tasks[j][k+1]))]))
+                              for i in range(num_r)]) for j in range(len(tasks)) for k in range(len(tasks[j])-1)]
+        self.add_constraints(
+            [self.val_c, self.task_c, self.mutual_c, self.connect_c])
+
+
+class environment:
+    def __init__(self, m=10, n=10):
+        self.grid = [[[] for _ in range(n)] for _ in range(m)]
+        self.s_pos = {}
+        self.obs = set()
+        self.t = set()
+        self.ct = set()
+
+    def add_obs(self, pos_list):
+        for x, y in pos_list:
+            self.grid[x][y].append("obs")
+            self.obs.add((x, y))
+
+    def add_t(self, task_label):
+        for x, y, ap in task_label:
+            self.grid[x][y].append(ap)
+            self.t.add((x, y))
+
+    def add_ct(self, task_label):
+        for x, y, ap in task_label:
+            self.grid[x][y].append(ap)
+            self.s_pos[ap] = (x, y)
+            self.ct.add((x, y))
+
+
+class robot:
+    def __init__(self):
+        pass
+
+
+def extract_ts_path(pa, ts, path):
+    """given pa path ,return ts path"""
+    res = []
+    for n in path:
+        ts_node = pa.nodes[n]["ts"]
+        res.append(ts.nodes[ts_node]["pos"])
+    return res
+        
+
+
 if __name__ == "__main__":
     # environment setting
-    m, n = 30, 30
+    env = environment(30, 30)
     # hronzital
-    obs = [(10, 10+i) for i in range(4)]
-    obs += [(10, 16+i) for i in range(4)]
-    obs += [(19, 10+i) for i in range(4)]
-    obs += [(19, 16+i) for i in range(4)]
+    h_obs = [(10, 10+i) for i in range(4)]+[(10, 16+i) for i in range(4)] +\
+            [(19, 10+i) for i in range(4)]+[(19, 16+i) for i in range(4)]
     # vertical
-    obs += [(11+i, 10) for i in range(3)]
-    obs += [(16+i, 10) for i in range(3)]
-    obs += [(11+i, 19) for i in range(3)]
-    obs += [(16+i, 19) for i in range(3)]
+    v_obs = [(11+i, 10) for i in range(3)]+[(16+i, 10) for i in range(3)] +\
+            [(11+i, 19) for i in range(3)]+[(16+i, 19) for i in range(3)]
+    env.add_obs(h_obs)
+    env.add_obs(v_obs)
     # task definition
     tasks_collection = [[0, 0, "t1"], [1, 7, "t2"], [7, 3, "t3"], [5, 11, "t4"],
                         [20, 0, "t5"], [21, 7, "t6"], [
@@ -523,28 +606,21 @@ if __name__ == "__main__":
                         [0, 20, "t9"], [1, 27, "t10"], [
                             7, 23, "t11"], [5, 29, "t12"],
                         [20, 20, "t13"], [21, 27, "t14"], [27, 23, "t15"], [25, 28, "t16"]]
-    coor_tasks = [[12, 12, "s1"], [18, 11, "s2"],
-                  [13, 17, "s3"], [16, 18, "s4"]]
-    s_pos = {}
-    for x, y, t in coor_tasks:  # s_pos is a relation function from c_task to its position
-        s_pos[t] = (x, y)
-    grid = [[[] for _ in range(n)] for _ in range(m)]
-    for x, y in obs:
-        grid[x][y].append("obs")
-    for x, y, ap in tasks_collection:
-        grid[x][y].append(ap)
-    for x, y, ap in coor_tasks:
-        grid[x][y].append(ap)
+    coor_tasks = [[15, 6, "s1"], [25, 5, "s2"],
+                  [3, 3, "s3"], [16, 0, "s4"]]
+    task_cap = {"s1": 1, "s2": 3, "s3": 2, "s4": 2}
+    env.add_t(tasks_collection)
+    env.add_ct(coor_tasks)
 
     T_start = time.time()  # starting point of whole program
 
     # environment transition system
-    ts = grid2map(grid)
+    ts = grid2map(env.grid)
     print("TS successfully constructed.")
 
     # tasks capability
     num_r = 4
-    task_cap = {"s1": 1, "s2": 3, "s3": 2, "s4": 2}
+
     local_formula = ["(F t1) && (F t2) && (F t3) && (F t4) && (!t1 U t4)",
                      "(F t5) && (F t6) && (F t7) && (F t8) && (!t6 U t8)",
                      "(F t9) && (F t10) && (F t11) && (F t12) && (!t10 U t12)",
@@ -566,50 +642,28 @@ if __name__ == "__main__":
         sys.exit()
     else:
         decompose = decomposition(ba, init_nodes, accept_nodes)  # 求解分割节点
-        # print(decompose)
         alpha = 0.1  # 在ba上搜索可以分割的路径
         path = task_decompose(ba, init_nodes, accept_nodes, decompose, alpha)
-        # print(path)
         tasks = decompose_tasks(path, decompose)  # 　根据路径分离任务
-        # print(tasks)
         print("Finishing decompose tasks from global BA.")
-
-        X = [[[[Int("x_%i_%i_%i_%i" % (i, j, k, l)) for l in range(len(tasks[j][k]))]
-               for k in range(len(tasks[j]))]
-              for j in range(len(tasks))]
-             for i in range(num_r)]
-        val_c = [And(0 <= X[i][j][k][l], X[i][j][k][l] <= 1) for i in range(num_r)
-                 for j in range(len(tasks)) for k in range(len(tasks[j]))
-                 for l in range(len(tasks[j][k]))]
-        task_c = [sum([X[i][j][k][l] for i in range(num_r)]) >= task_cap[tasks[j][k][l]]
-                  for j in range(len(tasks)) for k in range(len(tasks[j]))
-                  for l in range(len(tasks[j][k]))]
-        mutual_c = [sum([X[i][j][k][l] for l in range(len(tasks[j][k]))]) <= 1 for i in range(num_r)
-                    for j in range(len(tasks)) for k in range(len(tasks[j]))]
-        connect_c = [Or([Implies(Or([X[i][j][k][l] == 1 for l in range(len(tasks[j][k]))]),
-                                 Or([X[i][j][k+1][l] == 1 for l in range(len(tasks[j][k+1]))]))
-                         for i in range(num_r)]) for j in range(len(tasks)) for k in range(len(tasks[j])-1)]
-
-        s = Solver()
-        s.add(val_c + task_c + mutual_c + connect_c)
+        smt = SmtObj()
+        smt.add_task_cons(tasks, num_r)
         count = 0
         last_res = []  # record all past useful solution to filt newly obtained solution
         finish_time = []  # record finishing time for all robots at each iteration
-        best_alloc_path = None
-        best_end = None
         print("Starting Iteration:")
-        while s.check() == sat:
+        while smt.check() == sat:
             count += 1  # useful solution idx, filt with pareto optimal
-            sm = s.model()
-            res = [[[[sm.evaluate(X[i][j][k][l]) for l in range(len(tasks[j][k]))]
+            sm = smt.model()
+            res = [[[[sm.evaluate(smt.X[i][j][k][l]) for l in range(len(tasks[j][k]))]
                      for k in range(len(tasks[j]))] for j in range(len(tasks))]
                    for i in range(num_r)]
             # 添加非命题
-            f = And([X[i][j][k][l] == res[i][j][k][l] for i in range(num_r)
+            f = And([smt.X[i][j][k][l] == res[i][j][k][l] for i in range(num_r)
                      for j in range(len(tasks)) for k in range(len(tasks[j]))
                      for l in range(len(tasks[j][k]))])
-            neg_f = Not(f)
-            s.add(neg_f)
+            # neg_f = Not(f)
+            smt.add_constraint(Not(f))
             # 判断是否要计入对比
             res_list = [res[i][j][k][l].as_long() for i in range(num_r) for j in range(len(tasks))
                         for k in range(len(tasks[j])) for l in range(len(tasks[j][k]))]
@@ -641,7 +695,7 @@ if __name__ == "__main__":
 
             # animation
             # new_task_cap = task_cap.copy()
-            # animate_path(m, n, ts_path_list, alloc, new_task_cap, obs, tasks_collection, coor_tasks)
+            # animate_path(env, ts_path_list, alloc, new_task_cap)
             # compute end time
 
             cur_time = time.time()
@@ -655,7 +709,7 @@ if __name__ == "__main__":
                         twist_task[t[0]] = t[1:]
             sums_time, end_time = optimise_time(pa_path_list, pa_dict, ts, cost,
                                                 alloc, task_order, twist_task,
-                                                s_pos)
+                                                env.s_pos)
             print(
                 f"End of Iteration {count}. Program running {cur_time - T_start}s.")
         else:

@@ -11,30 +11,29 @@ from matplotlib import colors
 from collections import deque
 
 
-def grid_map(m: int, n: int, path: list, obs: list, tasks: list, servs: list, save_name="path_fig.png"):
-    # path_list is a list of paths
-    # free, obstacles, tasks, service
+def grid_map(env, path: list, save_name="path_fig.png"):
+    m, n = len(env.grid), len(env.grid[0])
     cmap = colors.ListedColormap(
         ['white', 'dimgray', 'orangered', "limegreen", "lightseagreen"])
     data = [[0 for _ in range(n)] for _ in range(m)]
     fig, ax = plt.subplots(figsize=(n, m))
     plt.axis('equal')
-    for x, y in obs:
+    for x, y in env.obs:
         data[x][y] = 1
-    for x, y, label in tasks:
+    for x, y in env.t:
         data[x][y] = 2
-    for x, y, label in servs:
+    for x, y in env.ct:
         data[x][y] = 3
     x_pos = [x + 0.4 for x in range(n)]
     y_pos = [y + 0.4 for y in range(m)]
     x_labels = [x for x in range(n)]
     y_labels = [y for y in range(m)]
-    ax.set_xticks(x_pos)
+    ax.set_xticks(x_pos, x_labels)
     ax.set_yticks(y_pos, y_labels)
-    for x, y, label in tasks:
-        ax.text(y+0.4, x+0.4, label)
-    for x, y, label in servs:
-        ax.text(y+0.4, x+0.4, label)
+    for x, y in env.t:
+        ax.text(y+0.2, x+0.2, env.grid[x][y][0])
+    for x, y in env.ct:
+        ax.text(y+0.2, x+0.2, env.grid[x][y][0])
     for i in range(len(path)):
         x, y = path[i]
         if data[x][y] == 0:
@@ -54,10 +53,11 @@ def grid_map(m: int, n: int, path: list, obs: list, tasks: list, servs: list, sa
 #        plt.pause(1)
 
 
-def animate_path(m: int, n: int, path_list: list, alloc: list, task_cap: dict, obs: list, tasks: list, servs: list, save_name="path_fig.png"):
+def animate_path(env, path_list: list, alloc: list, task_cap: dict, save_name="path_fig.png"):
+    m, n = len(env.grid), len(env.grid[0])
     servs_dic = {}
-    for x, y, label in servs:
-        servs_dic[(x, y)] = label
+    for t in env.s_pos:
+        servs_dic[env.s_pos[t]] = t
 
     nrobot = len(path_list)
     new_alloc = [deque(x) for x in alloc]
@@ -68,25 +68,24 @@ def animate_path(m: int, n: int, path_list: list, alloc: list, task_cap: dict, o
 
     cmap = colors.ListedColormap(color_record[:4+nrobot])
     data = [[0 for _ in range(n)] for _ in range(m)]
+
     fig, ax = plt.subplots(figsize=(n, m))
     plt.axis('equal')
-    for x, y in obs:
+    for x, y in env.obs:
         data[x][y] = 1
-    for x, y, label in tasks:
+    for x, y in env.t:
         data[x][y] = 2
-    for x, y, label in servs:
+    for x, y in env.ct:
         data[x][y] = 3
     x_pos = [x + 0.4 for x in range(n)]
     y_pos = [y + 0.4 for y in range(m)]
     x_labels = [x for x in range(n)]
     y_labels = [y for y in range(m)]
-    ax.set_xticks(x_pos)
+    ax.set_xticks(x_pos, x_labels)
     ax.set_yticks(y_pos, y_labels)
-    for x, y, label in tasks:
-        ax.text(y+0.2, x+0.2, label)
+    for x, y in env.t:
+        ax.text(y+0.2, x+0.2, env.grid[x][y][0])
     ex_text_len = len(ax.texts)
-    # for x, y, label in servs:
-    #     ax.text(y+0.2, x+0.2, label+" "+str(task_cap[label]))   
     idx = [0 for _ in range(nrobot)]
     sum_path_len = sum([len(path) for path in path_list])
     wait_flag = [False for _ in range(nrobot)]
@@ -119,12 +118,13 @@ def animate_path(m: int, n: int, path_list: list, alloc: list, task_cap: dict, o
                     idx[k] += 1
             else:
                 idx[k] += 1
-      
+
         _ = ax.pcolormesh(data, cmap=cmap, edgecolors='k',
                           linewidths=1.5, alpha=0.6)  # as one collection
-        for x_s, y_s, label in servs:
-            ax.text(y_s+0.2, x_s+0.2, label+" "+str(task_cap[label])) 
-        ax.text(n-1, m-1, s="Time: " + str(cnt), fontsize = 20)
+        for x_s, y_s in env.ct:
+            label = env.grid[x_s][y_s][0]
+            ax.text(y_s+0.2, x_s+0.2, label+" "+str(task_cap[label]))
+        ax.text(n-1, m-1, s="Time: " + str(cnt), fontsize=20)
         cnt += 1
         # print(alloc)
         # print(task_cap)
