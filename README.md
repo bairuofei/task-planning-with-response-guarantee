@@ -26,7 +26,10 @@ The project aims to synthesis task planning for a multi-robot system, given glob
 - 循环迭代过程中维持什么？
 循环过程中维持path和cost
 
-
+## TODO:
+1. python position parameters and key word parameters
+2. python is versus ==
+3. python concurrent programming
 
 ### 已解决
 Each feasible execution maintains a list of tuple, in which each tuple records
@@ -668,4 +671,96 @@ if __name__ == "__main__":
     
     
 
+## iteration Function record
+```py
+def iteration(MAS):
+    """calculate optimal plan for each robot in MAS"""
+    for i, robot in MAS.items():
+        ts = robot.ts
+        print(f"Robot {i}:")
+        TIME_start = time.time()
+        ba, init_nodes, accept_nodes = ltl_formula_to_ba(robot.f)
+        print(f"BA. Time: {time.time() - TIME_start}s. #node {len(ba)}: ")
+        pa, pa_init, pa_accept = product_automaton(
+            ts, ba, init_nodes, accept_nodes, init_pos=robot.pos)
+        robot.set_pa(pa, pa_init, pa_accept)
+        print(
+            f"PA. Time: {time.time() - TIME_start}s. #init: {len(pa_init)}. #accept: {len(pa_accept)}. #node: {len(pa)}.")
+        source = []
+        for init in pa_init:
+            ts_node = pa.nodes[init]["ts"]
+            if ts.nodes[ts_node]["pos"] == robot.pos:
+                source.append(init)
+        # TODO: 这里可以对pa_accept进行缩减，只保留task的位置对应的accept状态
+        min_cost, pa_path = optimal_path_tree(
+            pa, source, pa_accept)  # path contains pa states
+        ts_path = extract_ts_path(pa, ts, pa_path)
+        robot.set_pa_path(pa_path)
+        robot.set_ts_path(ts_path)
+        robot.set_path_cost(min_cost)    
+        path_label = [] # print labels along the path
+        for node in pa_path:
+            ts_node = pa.nodes[node]["ts"]
+            if ts.nodes[ts_node]["label"]:
+                path_label.append(ts.nodes[ts_node]["label"])
+        print(robot.f)
+        print(path_label)
+        print(f"Time Used: {time.time()-TIME_start}s.")
+        print("---------------------------------------------")
+        # animation: real_path is a list of real_path
+        # grid_map(env, real_path, save_name = "min-cost-path")
+    return
+
+```
+
+
+```py
+def concurrent_plan(robot):
+    TIME_start = time.time()
+    ts = robot.ts
+    ba, init_nodes, accept_nodes = ltl_formula_to_ba(robot.f)
+    print(robot.id, f"BA. Time: {time.time() - TIME_start}s. #node {len(ba)}: ")
+    pa, pa_init, pa_accept = product_automaton(
+        ts, ba, init_nodes, accept_nodes, init_pos=robot.pos)
+    robot.set_pa(pa, pa_init, pa_accept)
+    print(robot.id,
+        f"PA. Time: {time.time() - TIME_start}s. #init: {len(pa_init)}. #accept: {len(pa_accept)}. #node: {len(pa)}.")
+    source = []
+    for init in pa_init:
+        ts_node = pa.nodes[init]["ts"]
+        if ts.nodes[ts_node]["pos"] == robot.pos:
+            source.append(init)
+    # TODO: 这里可以对pa_accept进行缩减，只保留task的位置对应的accept状态
+    min_cost, pa_path = optimal_path_tree(
+        pa, source, pa_accept)  # path contains pa states
+    ts_path = extract_ts_path(pa, ts, pa_path)
+    robot.set_pa_path(pa_path)
+    robot.set_ts_path(ts_path)
+    robot.set_path_cost(min_cost)    
+    # path_label = [] # print labels along the path
+    # for node in pa_path:
+    #     ts_node = pa.nodes[node]["ts"]
+    #     if ts.nodes[ts_node]["label"]:
+    #         path_label.append(ts.nodes[ts_node]["label"])
+    # print(robot.f)
+    # print(path_label)
+    print(f"Robot {robot.id} Time Used: {time.time()-TIME_start}s.")
+    # animation: real_path is a list of real_path
+    # grid_map(env, real_path, save_name = "min-cost-path")
+
+def iteration(MAS):
+    """calculate optimal plan for each robot in MAS"""
+    start = time.time()
+    my_thread = {}
+    for i, robot in MAS.items():
+        my_thread[i] = threading.Thread(target=concurrent_plan, args=(robot,))
+    for i, t in my_thread.items():
+        t.start()
+    for i, t in my_thread.items():
+        t.join()
+    print("Finish PA construction.")
+    print(f"Time for all PA: {time.time() - start}s.")
+    return
+
+```
 

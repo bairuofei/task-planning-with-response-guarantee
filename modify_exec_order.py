@@ -36,22 +36,23 @@ def check_exec_node(pa, ts, n1, n2, t, pos):
     return False
 
 
-def find_exec_idx(pa, ts, plan: list, tasks: list, s_pos: dict):
+def find_exec_idx(robot, path, s_pos: dict):
     idx = []
     i = 0
-    t = tasks[i]
+    t = robot.c_tasks[i]
     pos = s_pos[t]  # tuple
-    for j in range(1, len(plan)):
-        if check_exec_node(pa, ts, plan[j-1], plan[j], t, pos):
+    for j in range(1, len(path)):
+        if check_exec_node(robot.pa, robot.ts, path[j-1], \
+                           path[j], t, pos):
             idx.append(j)
             i += 1
-            if i == len(tasks):
+            if i == len(robot.c_tasks):
                 break
-            t = tasks[i]
+            t = robot.c_tasks[i]
             pos = s_pos[t]
-    if len(idx) != len(tasks):
+    if len(idx) != len(robot.c_tasks):
         print("Error occur when find exec idx in given plan. #exec_nodes != #tasks")
-        return None
+        assert False
     return idx
 
 
