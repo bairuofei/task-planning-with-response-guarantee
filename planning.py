@@ -176,7 +176,8 @@ def can_transit(label: str, aps: list, pre_require = None) -> bool:
     
     
 
-def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, accept_nodes: list, init_pos = None):
+def product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, \
+                      accept_nodes: list, init_pos = None):
     """
     bfs
     ba_node -> {next_ba}
