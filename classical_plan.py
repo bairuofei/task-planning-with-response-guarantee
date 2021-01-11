@@ -2,10 +2,11 @@
 from collections import defaultdict
 
 from planning import *
-from ltl_decomposition import Environment
+from ltl_decomposition import Environment, optimal_path_tree
 
-def product_ts(ts_list, envs, init = None):
-    
+
+def product_ts(ts_list, envs, init=None):
+
     def combinations(idx, arr, res, visited):
         if idx == num_r:
             if str(arr) not in visited:
@@ -16,10 +17,10 @@ def product_ts(ts_list, envs, init = None):
             combinations(idx+1, arr, res, visited)
             arr.pop()
         return
-           
+
     # how to tranverse all combinations
     num_r = len(ts_list)
-    pts= nx.DiGraph()
+    pts = nx.DiGraph()
     visited = set()
     queue = [[(0, 0) for _ in range(num_r)]] if not init else [init]
     direct = [(-1, 0), [1, 0], [0, -1], [0, 1]]
@@ -36,14 +37,14 @@ def product_ts(ts_list, envs, init = None):
             for i in range(num_r):
                 x, y = nodes[i]
                 for l in envs[i].grid[x][y]:
-                    labels.add(l)     
+                    labels.add(l)
                     label_cnt[l] += 1
             pts.add_node(q_name,
-                         name = q_name, 
-                         label = list(labels), 
-                         label_cnt = label_cnt,
-                         pos = nodes)
-            pts.add_edge(q_name, q_name, weight = "0")
+                         name=q_name,
+                         label=list(labels),
+                         label_cnt=label_cnt,
+                         pos=nodes)
+            pts.add_edge(q_name, q_name, weight=0)
             next_qs = []
             for i, cur in enumerate(nodes):
                 x, y = cur
@@ -51,7 +52,7 @@ def product_ts(ts_list, envs, init = None):
                 next_qs.append([])
                 for d_x, d_y in direct:
                     cur_x, cur_y = x + d_x, y + d_y
-                    if 0<=cur_x<m and 0<=cur_y<n and "obs" not in envs[i].grid[cur_x][cur_y]:
+                    if 0 <= cur_x < m and 0 <= cur_y < n and "obs" not in envs[i].grid[cur_x][cur_y]:
                         next_qs[-1].append((cur_x, cur_y))
                 next_qs[-1].append((x, y))
             res = []
@@ -59,20 +60,22 @@ def product_ts(ts_list, envs, init = None):
             for new_q in res:
                 weight = 0
                 for k in range(num_r):
-                    if nodes[k] != new_q[k]: weight += 1                       
-                pts.add_edge(q_name, str(new_q), weight = weight)
-                pts.add_edge(str(new_q), q_name, weight = weight)
+                    if nodes[k] != new_q[k]:
+                        weight += 1
+                pts.add_edge(q_name, str(new_q), weight=weight)
+                pts.add_edge(str(new_q), q_name, weight=weight)
             new_queue += res
-        queue = new_queue      
+        queue = new_queue
     return pts
 
-def multi_product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, \
-                        accept_nodes: list, task_cap: dict, init_pos = None):
+
+def multi_product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list,
+                            accept_nodes: list, task_cap: dict, init_pos=None):
     """"""
     # preprocessing
     label_require = {}
     for _, _, label in list(ba.edges.data("label")):
-        label_require[label] = extract_transition(label) # dic(dic)
+        label_require[label] = extract_transition(label)  # dic(dic)
 
     pa = nx.DiGraph()
     pa_init, pa_accept = [], []
@@ -99,46 +102,50 @@ def multi_product_automaton(ts: nx.DiGraph, ba: nx.DiGraph, init_nodes: list, \
                 continue
             visited.add(cur)
             init, accept = ba.nodes[ba_pre]["init"], ba.nodes[ba_pre]["accept"]
-            pa.add_node(cur, 
-                        name = cur, 
-                        ts = ts_pre,
-                        ba = ba_pre,
-                        label = ts.nodes[ts_pre]["label"], 
-                        init = init, 
-                        accept = accept)
-            if init: pa_init.append(cur)
-            if accept: pa_accept.append(cur)
-                     
+            pa.add_node(cur,
+                        name=cur,
+                        ts=ts_pre,
+                        ba=ba_pre,
+                        label=ts.nodes[ts_pre]["label"],
+                        init=init,
+                        accept=accept)
+            if init:
+                pa_init.append(cur)
+            if accept:
+                pa_accept.append(cur)
+
             next_ba = list(ba[ba_pre])
             next_ts = list(ts[ts_pre])
             for ba_suf in next_ba:
                 label = ba[ba_pre][ba_suf]["label"]
                 for ts_suf in next_ts:
                     success = ts_suf + "+" + ba_suf
-                    if multi_can_transit(label, \
-                                   ts.nodes[ts_suf]["label"], \
-                                   ts.nodes[ts_suf]["label_cnt"], \
-                                   task_cap, 
-                                   pre_require = label_require[label]):
+                    if multi_can_transit(label,
+                                         ts.nodes[ts_suf]["label"],
+                                         ts.nodes[ts_suf]["label_cnt"],
+                                         task_cap,
+                                         pre_require=label_require[label]):
                         if success not in visited:
                             new_queue.append([ts_suf, ba_suf])
                         # considering loop, so success will be add to edge even it is in visited
-                        pa.add_edge(cur, success, weight = ts[ts_pre][ts_suf]["weight"], 
-                                    label = ba[ba_pre][ba_suf]["label"])                                                                                                                                                                                                                                                                                                                                                                                                                                  
+                        pa.add_edge(cur, success, weight=ts[ts_pre][ts_suf]["weight"],
+                                    label=ba[ba_pre][ba_suf]["label"])
         queue = new_queue
     return pa, pa_init, pa_accept
-        
 
-def multi_can_transit(label: str, aps: list, label_cnt: dict, task_cap: dict, \
-                      pre_require = None) -> bool:
+
+def multi_can_transit(label: str, aps: list, label_cnt: dict, task_cap: dict,
+                      pre_require=None) -> bool:
     # can speed up by preprocessing. require: dic of dic
-    require = extract_transition(label) if pre_require==None else pre_require
+    require = extract_transition(label) if pre_require == None else pre_require
     aps_set = set(aps)
     coor_t = set(list(task_cap.keys()))
     for key in require.keys():
         enable, disable = require[key]
-        if aps_set & disable: continue
-        if enable - aps_set: continue
+        if aps_set & disable:
+            continue
+        if enable - aps_set:
+            continue
         can_coor = True
         for t in enable & coor_t:
             if label_cnt[t] < task_cap[t]:
@@ -151,73 +158,70 @@ def multi_can_transit(label: str, aps: list, label_cnt: dict, task_cap: dict, \
 
 if __name__ == "__main__":
     start = time.time()
-    ## environment setting
+    # environment setting
     num_r = 2
     # hronzital
     h_obs = [(1, 1)]
     coor_tasks = [[0, 1, "s1"]]
     task_cap = {"s1": 2}
-    tasks_collection = [[[2, 3, "t1"],[5, 8, "t2"]],
-                        [[7, 4, "t3"],[6, 1, "t4"]],
-                        [[3, 5, "t5"],[0, 5, "t6"]],
-                        [[9, 4, "t7"],[2, 7, "t8"]]]
+    tasks_collection = [[[2, 3, "t1"], [4, 1, "t2"]],
+                        [[3, 4, "t3"], [3, 1, "t4"]],
+                        [[3, 5, "t5"], [0, 5, "t6"]],
+                        [[9, 4, "t7"], [2, 7, "t8"]]]
     ts_list = []
     envs = {}
     for i in range(num_r):
-        envs[i] = Environment(10, 10)
+        envs[i] = Environment(5, 5)
         envs[i].add_obs(h_obs)
         envs[i].add_t(tasks_collection[i])
         envs[i].add_ct(coor_tasks)
         ts_list.append(grid2map(envs[i].grid))
     print(f"TS list finish. {time.time()-start}s.")
-    ## product ts
+    # product ts
     pts = product_ts(ts_list, envs)
     print(f"PTS finish. #nodes: {len(pts)}. {time.time()-start}s.")
     # show_ts(pts)
     local_formula = ["(F t1) && (F t2)",
-                    "(F t3) && (F t4)"]
+                     "(F t3) && (F t4)"]
     c_formula = "F s1"
     local_formula.append(c_formula)
-    ## local task specification
+    # local task specification
     formula = ' && '.join(local_formula)
     ba, init_nodes, accept_nodes = ltl_formula_to_ba(formula)
     print(f"ba #states: {len(ba)}. {time.time()-start}s.")
     # show_BA(ba)
-    
+
     # T_ts_ba = time.time()
-    
-    ## product automaton
+
+    # product automaton
     init_pos = [(0, 0) for _ in range(num_r)]
-    pa, pa_init, pa_accept = multi_product_automaton(pts, ba, init_nodes, \
-                                                     accept_nodes, task_cap, \
-                                                     init_pos = init_pos)
+    pa, pa_init, pa_accept = multi_product_automaton(pts, ba, init_nodes,
+                                                     accept_nodes, task_cap,
+                                                     init_pos=init_pos)
     print(f"pa #states: {len(pa)}. {time.time()-start}s.")
     # show_BA(pa, show=True, title="product automaton")
     source = []
     for init in pa_init:
         ts_node = pa.nodes[init]["ts"]
-        if pts.nodes[ts_node]["pos"] == str(init_pos):
+        if pts.nodes[ts_node]["pos"] == init_pos:
             source.append(init)
-        
-    ## min-cost path search
+
+    # min-cost path search
     # TODO: 这里可以对pa_accept进行缩减，只保留task的位置对应的accept状态
-    min_cost, path = optimal_path(pa, source, pa_accept)
-    
+    min_cost, path = optimal_path_tree(pa, source, pa_accept)
+
     print(f"Search end. {time.time()-start}s.")
-    
-    # # plot results
-    # print(min_cost)
-    # real_path1 = []
-    # for node in path:
-    #     ts_node = pa.nodes[node]["ts"]
-    #     print(ts_node)
-    #     real_path1.append(ts.nodes[ts_node]["pos"])
-    # print("***********************************")
+
+    # plot results
+    print(min_cost)
+    ts_path = []
+    for node in path:
+        ts_node = pa.nodes[node]["ts"]
+        print(ts_node)
+        ts_path.append(pts.nodes[ts_node]["pos"])
+    print("***********************************")
     # # T_pa = time.time()
-    
-    
-    
-    
+
     # ## environment setting
     # num_r = 4
     # envs = {}
@@ -247,6 +251,3 @@ if __name__ == "__main__":
     # print("TS list successfully constructed.")
 
     # ## product ts
-    
-    
-    

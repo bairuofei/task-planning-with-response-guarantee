@@ -327,7 +327,7 @@ def construct_formula(alloc):
 
 
 def optimise_latest(robot, t_idx, exec_time, end_sum, old_cost, old_idxs,
-               alloc, task_order, twist_task, s_pos):
+                    alloc, task_order, twist_task, s_pos):
     """from all nodes in cand, find one cand that can form better path.
        compare with: 1. cur_max; 2. end_sum"""
     # preprocessing
@@ -452,29 +452,30 @@ def optimise_time_without2(MAS, alloc, task_order, twist_task, s_pos):
         iter_cnt += 1
         j, max_v = -1, 0
         for k, v in enumerate(exec_time[t_i]):
-            if v > max_v: 
+            if v > max_v:
                 max_v = v
                 j = k
         robot = MAS[j]
         can_opt = optimise_latest(robot, t_i, exec_time, sum(end_time), idea_cost,
-                             idxs, alloc, task_order, twist_task, s_pos)
+                                  idxs, alloc, task_order, twist_task, s_pos)
         if can_opt:
             idea_cost[j] = compute_path_cost(robot.pa, robot.pa_path)
             idxs[j] = find_exec_idx(robot, robot.pa_path, s_pos)
             end_time, exec_time = compute_finish_time(
                 idea_cost, idxs, alloc, task_order, twist_task)
-            changed_cnt += 1     
+            changed_cnt += 1
         else:
             if t_i == len(task_order) - 1:
                 if changed_cnt == 0:
                     break
-                changed_cnt = 0                  
+                changed_cnt = 0
         t_i = (t_i+1) % len(task_order)
-        
+
     print(sum(end_time))
     print("Optimise Iteration: ", iter_cnt)
     optimise.append(sum(end_time))
     return optimise
+
 
 def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
     # global variables
@@ -502,43 +503,43 @@ def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
         iter_cnt += 1
         j, max_v = -1, 0
         for k, v in enumerate(exec_time[t_i]):
-            if v > max_v: 
+            if v > max_v:
                 max_v = v
                 j = k
         robot = MAS[j]
         can_opt = optimise_latest(robot, t_i, exec_time, sum(end_time), idea_cost,
-                             idxs, alloc, task_order, twist_task, s_pos)
+                                  idxs, alloc, task_order, twist_task, s_pos)
         if can_opt:
             idea_cost[j] = compute_path_cost(robot.pa, robot.pa_path)
             idxs[j] = find_exec_idx(robot, robot.pa_path, s_pos)
             end_time, exec_time = compute_finish_time(
                 idea_cost, idxs, alloc, task_order, twist_task)
-            changed_cnt += 1     
+            changed_cnt += 1
         else:
             # TODO: modify the earliest robot execution time
             j, min_v = -1, float("inf")
             for k, v in enumerate(exec_time[t_i]):
-                if v != -1 and v < min_v: 
+                if v != -1 and v < min_v:
                     min_v = v
                     j = k
             robot = MAS[j]
             print("opt2 start")
             can_opt2 = optimise_earliest(robot, t_i, min_v, max_v, exec_time, sum(end_time), idea_cost,
-                             idxs, alloc, task_order, twist_task, s_pos)
+                                         idxs, alloc, task_order, twist_task, s_pos)
             print("opt2 end")
             if can_opt2:
                 idea_cost[j] = compute_path_cost(robot.pa, robot.pa_path)
                 idxs[j] = find_exec_idx(robot, robot.pa_path, s_pos)
                 end_time, exec_time = compute_finish_time(
                     idea_cost, idxs, alloc, task_order, twist_task)
-                changed_cnt += 1 
+                changed_cnt += 1
             else:
                 if t_i == len(task_order) - 1:
                     if changed_cnt == 0:
                         break
-                    changed_cnt = 0                  
+                    changed_cnt = 0
         t_i = (t_i+1) % len(task_order)
-        
+
     print(sum(end_time))
     print("Optimise Iteration: ", iter_cnt)
     optimise.append(sum(end_time))
@@ -546,7 +547,7 @@ def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
 
 
 def optimise_earliest(robot, t_i, min_v, max_v, exec_time, end_sum, old_cost, old_idxs,
-                     alloc, task_order, twist_task, s_pos) -> bool:
+                      alloc, task_order, twist_task, s_pos) -> bool:
     """modify the earliest robot pa_path"""
     # preprocessing
     # considering twist task and get the actual task name
@@ -581,7 +582,7 @@ def optimise_earliest(robot, t_i, min_v, max_v, exec_time, end_sum, old_cost, ol
             short_cost = nx.shortest_path_length(pa, init, weight="weight")
             for new in cand:
                 if new not in short_cost or short_cost[new] + prev_time > max_v \
-                    or short_cost[new] + prev_time < min_v:
+                        or short_cost[new] + prev_time < min_v:
                     continue
                 tail1 = nx.shortest_path(pa, init, new, weight="weight")
                 if cand in robot.pa_accept:
@@ -762,6 +763,7 @@ if __name__ == "__main__":
     file_names = [["time1.txt", "sol1.txt"],
                   ["time2.txt", "sol2.txt"]]
     for test_id, f_names in enumerate(file_names):
+        time_prefix = str(int(time.time()))
         name1, name2 = f_names
         # environment setting
         env = Environment(30, 30)
@@ -787,16 +789,16 @@ if __name__ == "__main__":
         task_cap = {"s1": 1, "s2": 3, "s3": 2, "s4": 2}
         env.add_t(tasks_collection)
         env.add_ct(coor_tasks)
-        
+
         T_start = time.time()  # starting point of whole program
-        
+
         # environment transition system
         ts = grid2map(env.grid)
         print("TS successfully constructed.")
-        
+
         # tasks capability
         num_r = 4
-        
+
         local_formula = ["(F t1) && (F t2) && (F t3) && (F t4) && (!t1 U t4)",
                          "(F t5) && (F t6) && (F t7) && (F t8) && (!t6 U t8)",
                          "(F t9) && (F t10) && (F t11) && (F t12) && (!t10 U t12)",
@@ -806,9 +808,9 @@ if __name__ == "__main__":
         for i in range(num_r):
             MAS[i] = Robot(i, pos=init_pos[i], local_f=local_formula[i])
             MAS[i].set_ts(ts)
-        
+
         c_formula = '(F s1) && (F s2) && (F s4) && (!s3 U s2) && (G(s4 -> (F s3)))'
-        
+
         # decompose global task formula
         ba, init_nodes, accept_nodes = ltl_formula_to_ba(
             c_formula)  # convert to BA
@@ -824,7 +826,8 @@ if __name__ == "__main__":
         else:
             decompose = decomposition(ba, init_nodes, accept_nodes)  # 求解分割节点
             alpha = 0.1  # 在ba上搜索可以分割的路径
-            path = task_decompose(ba, init_nodes, accept_nodes, decompose, alpha)
+            path = task_decompose(
+                ba, init_nodes, accept_nodes, decompose, alpha)
             tasks = decompose_tasks(path, decompose)  # 　根据路径分离任务
             print("Finishing decompose tasks from global BA.")
             smt = SmtObj()
@@ -857,24 +860,24 @@ if __name__ == "__main__":
                     # remove old useless assignments
                     sol_record = remove_useless_res(x_sol, sol_record)
                 sol_record.add(tuple(x_sol))
-        
+
                 print("*********************")
                 print(f"Iteration {iter_cnt}:")
                 print("*********************")
-        
+
                 alloc = cooperation_task(tasks, x_sol)  # list[list]
                 coor_formula = construct_formula(alloc)
                 for i, rb in MAS.items():
                     rb.set_coor_f(coor_formula[i])
                     rb.set_c_tasks(alloc[i])
-        
+
                 # TODO: change ts from public to a private list
                 iteration(MAS)
-        
+
                 # animation
                 # copy_task_cap = copy.deepcopy(task_cap)
                 # animate_path(env, ts_path_list, alloc, copy_task_cap)
-        
+
                 task_order = [t[0] for seg in tasks for t in seg]
                 twist_task = {}
                 for seg in tasks:
@@ -889,12 +892,12 @@ if __name__ == "__main__":
                                                       twist_task, env.s_pos)
                 time_record.append(optimise)
                 solution.append(tuple(x_sol))
-                
-                time_prefix = str(int(time.time()))
-                file_name1 = save_variable(time_record, "./data/" + time_prefix + name1)
-                file_name2 = save_variable(solution, "./data/" + time_prefix + name2)
+
+                file_name1 = save_variable(
+                    time_record, "./data/" + time_prefix + name1)
+                file_name2 = save_variable(
+                    solution, "./data/" + time_prefix + name2)
                 print(
                     f"End of Iteration {iter_cnt}. Program running {time.time() - T_start}s.")
             else:
                 print("fail to solve")
-        
