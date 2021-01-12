@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # -*- coding: utf-8 -*-label_require
 
 import sys
@@ -292,9 +293,7 @@ def iteration(MAS):
         # TODO: 这里可以对pa_accept进行缩减，只保留task的位置对应的accept状态
         min_cost, pa_path = optimal_path_tree(
             pa, source, pa_accept)  # path contains pa states
-        ts_path = extract_ts_path(pa, ts, pa_path)
         robot.set_pa_path(pa_path)
-        robot.set_ts_path(ts_path)
         robot.set_path_cost(min_cost)
         path_label = []  # print labels along the path
         for node in pa_path:
@@ -418,7 +417,7 @@ def find_leader_t(task_order, twist_task, t):
         if t in tasks:
             return leader
 
-
+# TOOD: path cost　is not consistent with time consuming
 def compute_path_cost(pa, path):
     cost = 0
     for i in range(len(path)-1):
@@ -428,7 +427,7 @@ def compute_path_cost(pa, path):
 
 def optimise_time_without2(MAS, alloc, task_order, twist_task, s_pos):
     # global variables
-    optimise = []
+    # optimise = None
     idxs = []
     idea_cost = []
     for t_i, robot in MAS.items():
@@ -436,14 +435,13 @@ def optimise_time_without2(MAS, alloc, task_order, twist_task, s_pos):
         idxs.append(idx)
         robot.set_pa_exec(find_exec_node(
             robot.pa, robot.ts, s_pos, robot.c_tasks))
-        robot.set_exec_idx(idx)
         idea_cost.append(robot.path_cost)
 
     # exec_time: each step record given last step(considering synchronization), compute current step execution time for each robot
     end_time, exec_time = compute_finish_time(
         idea_cost, idxs, alloc, task_order, twist_task)
-    optimise.append(sum(idea_cost))
-    optimise.append(sum(end_time))
+    # optimise.append(sum(idea_cost))
+    # optimise.append(sum(end_time))
     
     # iterating over: cost, idxs, pa_path_list, end_time, exec_time
     t_i = 0
@@ -472,10 +470,9 @@ def optimise_time_without2(MAS, alloc, task_order, twist_task, s_pos):
                 changed_cnt = 0
         t_i = (t_i+1) % len(task_order)
 
-    print(sum(end_time))
-    print("Optimise Iteration: ", iter_cnt)
-    optimise.append(sum(end_time))
-    return optimise
+    # print(sum(end_time))
+    print("Opt1-Iteration: ", iter_cnt)
+    return sum(end_time)
 
 
 def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
@@ -488,7 +485,6 @@ def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
         idxs.append(idx)
         robot.set_pa_exec(find_exec_node(
             robot.pa, robot.ts, s_pos, robot.c_tasks))
-        robot.set_exec_idx(idx)
         idea_cost.append(robot.path_cost)
 
     # exec_time: each step record given last step(considering synchronization), compute current step execution time for each robot
@@ -545,7 +541,7 @@ def optimise_time(MAS, alloc, task_order, twist_task, s_pos):
         t_i = (t_i+1) % len(task_order)
 
     print(sum(end_time))
-    print("Optimise Iteration: ", iter_cnt)
+    print("Opt12-Iteration: ", iter_cnt)
     optimise.append(sum(end_time))
     return optimise
 
@@ -734,12 +730,10 @@ class Robot:
         self.pa_init = pa_init
         self.pa_accept = pa_accept
 
-    def set_ts_path(self, path):
-        self.ts_path = path
-
     def set_pa_path(self, path):
         self.pa_path = path
-
+        self.ts_path = extract_ts_path(self.pa, self.ts, self.pa_path)
+        
     def set_path_cost(self, cost):
         self.path_cost = cost
 
@@ -753,162 +747,159 @@ class Robot:
     def set_c_tasks(self, alloc):
         self.c_tasks = alloc
 
-    def set_end_time(self, end_time):
-        self.end_time = end_time
-
-    def set_exec_time(self, exec_time):
-        self.exec_time = exec_time
-
-    def set_exec_idx(self, idx):
-        self.exec_idx = idx
 
 
 if __name__ == "__main__":
-    file_names = [["opt1.txt", "sol1.txt", "best1.txt"],
-                  ["opt2.txt", "sol2.txt", "best2.txt"]]
-    for test_id, f_names in enumerate(file_names):
-        time_prefix = str(int(time.time()))
-        name1, name2, name3 = f_names
-        # environment setting
-        env = Environment(30, 30)
-        # hronzital
-        h_obs = [(10, 10+i) for i in range(4)]+[(10, 16+i) for i in range(4)] +\
-                [(19, 10+i) for i in range(4)]+[(19, 16+i) for i in range(4)]
-        # vertical
-        v_obs = [(11+i, 10) for i in range(3)]+[(16+i, 10) for i in range(3)] +\
-                [(11+i, 19) for i in range(3)]+[(16+i, 19) for i in range(3)]
-        env.add_obs(h_obs)
-        env.add_obs(v_obs)
-        # task definition
-        tasks_collection = [[0, 0, "t1"], [1, 7, "t2"], [7, 3, "t3"], [5, 11, "t4"],
-                            [20, 0, "t5"], [21, 7, "t6"], [
-                                27, 3, "t7"], [25, 11, "t8"],
-                            [0, 20, "t9"], [1, 27, "t10"], [
-                                7, 23, "t11"], [5, 29, "t12"],
-                            [20, 20, "t13"], [21, 27, "t14"], [27, 23, "t15"], [25, 28, "t16"]]
-        # coor_tasks = [[17, 15, "s1"], [12, 12, "s2"],
-        #               [15, 15, "s3"], [13, 18, "s4"]]
-        coor_tasks = [[15, 6, "s1"], [25, 5, "s2"],
-                      [3, 3, "s3"], [16, 0, "s4"]]
-        task_cap = {"s1": 1, "s2": 3, "s3": 2, "s4": 2}
-        env.add_t(tasks_collection)
-        env.add_ct(coor_tasks)
+    time_prefix = str(int(time.time()))[-3:]
+    
+    ## configurations:
+    num_r = 4
+    # environment setting
+    m, n = 30, 30
+    # hronzital
+    h_obs = [(10, 10+i) for i in range(4)]+[(10, 16+i) for i in range(4)] +\
+            [(19, 10+i) for i in range(4)]+[(19, 16+i) for i in range(4)]
+    # vertical
+    v_obs = [(11+i, 10) for i in range(3)]+[(16+i, 10) for i in range(3)] +\
+            [(11+i, 19) for i in range(3)]+[(16+i, 19) for i in range(3)]
+    # task definition
+    tasks_collection = [[[0, 0, "t1"], [1, 7, "t2"], [7, 3, "t3"], [5, 11, "t4"]],
+                        [[20, 0, "t5"], [21, 7, "t6"], [27, 3, "t7"], [25, 11, "t8"]],
+                        [[0, 20, "t9"], [1, 27, "t10"], [7, 23, "t11"], [5, 29, "t12"]],
+                        [[20, 20, "t13"], [21, 27, "t14"], [27, 23, "t15"], [25, 28, "t16"]]]
+    coor_tasks = [[15, 6, "s1"], [25, 5, "s2"],
+                  [3, 3, "s3"], [16, 0, "s4"]]
+    task_cap = {"s1": 1, "s2": 3, "s3": 2, "s4": 2}
+    c_formula = '(F s1) && (F s2) && (F s4) && (!s3 U s2) && (G(s4 -> (F s3)))'
+    # tasks capability
+    local_formula = ["(F t1) && (F t2) && (F t3) && (F t4) && (!t1 U t4)",
+                    "(F t5) && (F t6) && (F t7) && (F t8) && (!t6 U t8)",
+                    "(F t9) && (F t10) && (F t11) && (F t12) && (!t10 U t12)",
+                    "(F t13) && (F t14) && (F t15) && (F t16) && (!t16 U t15)"] 
+    init_pos = [(3, 0), (22, 0), (3, 27), (24, 28)]
+    
+    T_start = time.time()  # starting point of whole program
 
-        T_start = time.time()  # starting point of whole program
+    envs = {}
+    for i in range(num_r):
+        envs[i] = Environment(m, n)
+        envs[i].add_obs(h_obs)
+        envs[i].add_obs(v_obs)
+        envs[i].add_t(tasks_collection[i])
+        envs[i].add_ct(coor_tasks)
+    MAS = {}
+    for i in range(num_r):
+        MAS[i] = Robot(i, pos=init_pos[i], local_f=local_formula[i])
+        ts = grid2map(envs[i].grid)
+        MAS[i].set_ts(ts)     
+    print("TS successfully constructed.")
+    
+    # decompose global task formula
+    ba, init_nodes, accept_nodes = ltl_formula_to_ba(
+        c_formula)  # convert to BA
+    print(f"Convert c_formula to BA. #state: {len(ba)}")
+    # show_BA(ba)
+    ba_deterministic(ba)  # remove "or" transition condition
+    exist_path = ba_feasible_check(
+        ba, init_nodes, accept_nodes, num_r, task_cap)
+    # show_BA(ba, title="feasible_ba")
+    if not exist_path:
+        print("Task Requirement can not be Satisfied. Program Break.")
+        sys.exit()
+    else:
+        decompose = decomposition(ba, init_nodes, accept_nodes)  # 求解分割节点
+        alpha = 0.1  # 在ba上搜索可以分割的路径
+        path = task_decompose(
+            ba, init_nodes, accept_nodes, decompose, alpha)
+        tasks = decompose_tasks(path, decompose)  # 　根据路径分离任务
+        task_order = [t[0] for seg in tasks for t in seg]
+        twist_task = {}
+        for seg in tasks:
+            for t in seg:
+                if len(t) > 1:
+                    twist_task[t[0]] = t[1:]
+        
+        print("Finishing decompose tasks from global BA.")
+        smt = SmtObj()
+        smt.add_task_cons(tasks, num_r)
+        iter_cnt = 0
+        sol_record = set()  # record all past useful solution to filt newly obtained solution
+        smt_filt = []
+        opt_res = []
+        solution = []
+        best_ever = float("inf")
+        print("Starting Iteration:")
+        remove_cnt = 0
+        while smt.check() == sat:
+            iter_cnt += 1  # useful solution idx, filt with pareto optimal
+            sm = smt.model()
+            res = [[[[sm.evaluate(smt.X[i][j][k][l]) for l in range(len(tasks[j][k]))]
+                     for k in range(len(tasks[j]))] for j in range(len(tasks))]
+                   for i in range(num_r)]
+            # 添加非命题
+            f = And([smt.X[i][j][k][l] == res[i][j][k][l] for i in range(num_r)
+                     for j in range(len(tasks)) for k in range(len(tasks[j]))
+                     for l in range(len(tasks[j][k]))])
+            # neg_f = Not(f)
+            smt.add_constraint(Not(f))
+            # 判断是否要计入对比
+            x_sol = [res[i][j][k][l].as_long() for i in range(num_r) for j in range(len(tasks))
+                     for k in range(len(tasks[j])) for l in range(len(tasks[j][k]))]
+            # filt smt solution
+            if sol_record != None:
+                if is_worse_smt(x_sol, sol_record):  # 新的解没意义
+                    iter_cnt -= 1
+                    remove_cnt += 1
+                    continue
+                # remove old useless assignments
+                sol_record = remove_useless_res(x_sol, sol_record)
+            sol_record.add(tuple(x_sol))
+            smt_filt.append([len(sol_record), remove_cnt]) # record the filted sol
+            remove_cnt = 0
+            
+            print("*********************")
+            print(f"Iteration {iter_cnt}:")
+            print("*********************")
 
-        # environment transition system
-        ts = grid2map(env.grid)
-        print("TS successfully constructed.")
+            alloc = cooperation_task(tasks, x_sol)  # list[list]
+            coor_formula = construct_formula(alloc)
+            for i, rb in MAS.items():
+                rb.set_coor_f(coor_formula[i])
+                rb.set_c_tasks(alloc[i])
 
-        # tasks capability
-        num_r = 4
+            # TODO: change ts from public to a private list
+            iteration(MAS)
 
-        local_formula = ["(F t1) && (F t2) && (F t3) && (F t4) && (!t1 U t4)",
-                         "(F t5) && (F t6) && (F t7) && (F t8) && (!t6 U t8)",
-                         "(F t9) && (F t10) && (F t11) && (F t12) && (!t10 U t12)",
-                         "(F t13) && (F t14) && (F t15) && (F t16) && (!t16 U t15)"]
-        init_pos = [(3, 0), (22, 0), (3, 27), (24, 28)]
-        MAS = {}
-        for i in range(num_r):
-            MAS[i] = Robot(i, pos=init_pos[i], local_f=local_formula[i])
-            MAS[i].set_ts(ts)
-
-        c_formula = '(F s1) && (F s2) && (F s4) && (!s3 U s2) && (G(s4 -> (F s3)))'
-
-        # decompose global task formula
-        ba, init_nodes, accept_nodes = ltl_formula_to_ba(
-            c_formula)  # convert to BA
-        print(f"Convert c_formula to BA. #state: {len(ba)}")
-        # show_BA(ba)
-        ba_deterministic(ba)  # remove "or" transition condition
-        exist_path = ba_feasible_check(
-            ba, init_nodes, accept_nodes, num_r, task_cap)
-        # show_BA(ba, title="feasible_ba")
-        if not exist_path:
-            print("Task Requirement can not be Satisfied. Program Break.")
-            sys.exit()
+            # animation
+            # copy_task_cap = copy.deepcopy(task_cap)
+            # animate_path(env, ts_path_list, alloc, copy_task_cap)
+            pa_path_list = []
+            idea_cost = []
+            for r, robot in MAS.items():
+                pa_path_list.append(robot.pa_path)
+                idea_cost.append(robot.path_cost)
+                      
+            print("Opt1+Opt2:")
+            optimise = optimise_time(MAS, alloc, task_order,
+                                     twist_task, envs[0].s_pos)
+            for r, robot in MAS.items():
+                robot.set_pa_path(pa_path_list[r])
+                robot.set_path_cost(idea_cost[r])
+            print("Opt1:")
+            optimise.append(optimise_time_without2(MAS, alloc, task_order,
+                                                  twist_task, envs[0].s_pos))
+            optimise.append(min(best_ever, optimise[2]))
+            opt_res.append(optimise)
+            solution.append(tuple(x_sol))
+            # optimise: LB; UB; opt1+opt2; opt1; cur_best.
+            file_name1 = save_variable(
+                opt_res, "./data/" + time_prefix + "opt.txt")
+            file_name2 = save_variable(
+                solution, "./data/" + time_prefix + "sol.txt")
+            file_name3 = save_variable(
+                smt_filt, "./data/" + time_prefix + "filt.txt")
+            print(
+                f"End of Iteration {iter_cnt}. Program running {time.time() - T_start}s.")
         else:
-            decompose = decomposition(ba, init_nodes, accept_nodes)  # 求解分割节点
-            alpha = 0.1  # 在ba上搜索可以分割的路径
-            path = task_decompose(
-                ba, init_nodes, accept_nodes, decompose, alpha)
-            tasks = decompose_tasks(path, decompose)  # 　根据路径分离任务
-            print("Finishing decompose tasks from global BA.")
-            smt = SmtObj()
-            smt.add_task_cons(tasks, num_r)
-            iter_cnt = 0
-            sol_record = set()  # record all past useful solution to filt newly obtained solution
-            opt_res = []
-            solution = []
-            best_res = []
-            best_ever = float("inf")
-            print("Starting Iteration:")
-            while smt.check() == sat:
-                iter_cnt += 1  # useful solution idx, filt with pareto optimal
-                sm = smt.model()
-                res = [[[[sm.evaluate(smt.X[i][j][k][l]) for l in range(len(tasks[j][k]))]
-                         for k in range(len(tasks[j]))] for j in range(len(tasks))]
-                       for i in range(num_r)]
-                # 添加非命题
-                f = And([smt.X[i][j][k][l] == res[i][j][k][l] for i in range(num_r)
-                         for j in range(len(tasks)) for k in range(len(tasks[j]))
-                         for l in range(len(tasks[j][k]))])
-                # neg_f = Not(f)
-                smt.add_constraint(Not(f))
-                # 判断是否要计入对比
-                x_sol = [res[i][j][k][l].as_long() for i in range(num_r) for j in range(len(tasks))
-                         for k in range(len(tasks[j])) for l in range(len(tasks[j][k]))]
-                # filt smt solution
-                if sol_record != None:
-                    if is_worse_smt(x_sol, sol_record):  # 新的解没意义
-                        iter_cnt -= 1
-                        continue
-                    # remove old useless assignments
-                    sol_record = remove_useless_res(x_sol, sol_record)
-                sol_record.add(tuple(x_sol))
+            print("fail to solve")
 
-                print("*********************")
-                print(f"Iteration {iter_cnt}:")
-                print(len(sol_record))
-                print("*********************")
-
-                alloc = cooperation_task(tasks, x_sol)  # list[list]
-                coor_formula = construct_formula(alloc)
-                for i, rb in MAS.items():
-                    rb.set_coor_f(coor_formula[i])
-                    rb.set_c_tasks(alloc[i])
-
-                # TODO: change ts from public to a private list
-                iteration(MAS)
-
-                # animation
-                # copy_task_cap = copy.deepcopy(task_cap)
-                # animate_path(env, ts_path_list, alloc, copy_task_cap)
-
-                task_order = [t[0] for seg in tasks for t in seg]
-                twist_task = {}
-                for seg in tasks:
-                    for t in seg:
-                        if len(t) > 1:
-                            twist_task[t[0]] = t[1:]
-                if test_id == 0:
-                    optimise = optimise_time(MAS, alloc, task_order,
-                                              twist_task, env.s_pos)
-                else:
-                    optimise = optimise_time_without2(MAS, alloc, task_order,
-                                                      twist_task, env.s_pos)
-                best_ever = min(best_ever, optimise[2])
-                best_res.append(best_ever)
-                opt_res.append(optimise)
-                solution.append(tuple(x_sol))
-
-                file_name1 = save_variable(
-                    opt_res, "./data/" + time_prefix + name1)
-                file_name2 = save_variable(
-                    solution, "./data/" + time_prefix + name2)
-                file_name3 = save_variable(
-                    best_res, "./data/" + time_prefix + name3)
-                print(
-                    f"End of Iteration {iter_cnt}. Program running {time.time() - T_start}s.")
-            else:
-                print("fail to solve")

@@ -7,6 +7,13 @@ The project aims to synthesis task planning for a multi-robot system, given glob
 1. Add local task and global task LTL formual in `ltl_decomposition.py`. And also specify the task requirements for each coorperative task.
 2. execute `ltl_decomposition.py`.
 
+## Notes
+在classical_plan.py中，算出来的结果对应的总任务执行时间，就是最优路径的cost乘以机器人数量。
+这是因为在执行协同任务时，classical_plan中算出的plan就是同步之后的。
+
+需要注意的是，由于不同机器人结束任务有先后，所以对于结束任务较早的机器人，后面的原地停留时间不应该
+算入总任务执行时间，需要识别并进行剔除。
+
 ## TODO
 1、目前在cand.remove时会出现问题；
 ２、就目前看，该算法没有效果。考虑将cur加入到cand中验证正确性。并进一步考虑调整
@@ -14,19 +21,8 @@ The project aims to synthesis task planning for a multi-robot system, given glob
 
 ## Problems
 
-### 未解决
-- 等待时间优化算法分为两个步骤：
-１、把最晚的机器人时间调早一点。对该机器人而言，如果尝试所有的移动方式，均无法降低总
-执行时间，则切换到第二个步骤；
-２、把最早的机器人时间调晚一点。对该机器人而言，如果尝试所有的待选路径，均无法在延迟
-自身执行时间的情况下降低全局的执行时间，则停止迭代，将停止迭代的标志位置为True。
-注意这里置迭代标识位时，如果task_order中上一个任务的标识位不是True，则不进行置位，
-因为上游节点可能在后续的调整中使得当前节点可以继续调整。
 
-- 循环迭代过程中维持什么？
-循环过程中维持path和cost
-
-## TODO:
+## TOLEARN:
 1. python position parameters and key word parameters
 2. python is versus ==
 3. python concurrent programming
@@ -55,6 +51,17 @@ defaultdict(set,
               'T0_S9',
               'accept_all'},
              's2': {'T0_S10', 'T0_S11', 'T0_S9', 'accept_all'}})
+             
+- 等待时间优化算法分为两个步骤：
+１、把最晚的机器人时间调早一点。对该机器人而言，如果尝试所有的移动方式，均无法降低总
+执行时间，则切换到第二个步骤；
+２、把最早的机器人时间调晚一点。对该机器人而言，如果尝试所有的待选路径，均无法在延迟
+自身执行时间的情况下降低全局的执行时间，则停止迭代，将停止迭代的标志位置为True。
+注意这里置迭代标识位时，如果task_order中上一个任务的标识位不是True，则不进行置位，
+因为上游节点可能在后续的调整中使得当前节点可以继续调整。
+
+- 循环迭代过程中维持什么？
+循环过程中维持path和cost
              
 # -*- coding: utf-8 -*-label_require
 
@@ -763,4 +770,44 @@ def iteration(MAS):
     return
 
 ```
+## server classical planning results
+```bash
+TS list finish. 0.001308441162109375s.
+PTS finish. #nodes: 13824. 6.402230262756348s.
+ba #states: 108. 7.35369610786438s.
+341 1492992
+1122 1492992
+4451 1492992
+17838 1492992
+53511 1492992
+109334 1492992
+173208 1492992
+255582 1492992
+374256 1492992
+519962 1492992
+683706 1492992
+853183 1492992
+1003088 1492992
+1104657 1492992
+1164239 1492992
+1198478 1492992
+1202574 1492992
+1206670 1492992
+pa #states: 1206670. 4653.323351383209s.
+Search end. 4758.2435557842255s.
+29
+[(0, 0), (0, 0), (0, 0)]
+[(0, 1), (0, 1), (0, 1)]
+[(0, 1), (0, 2), (0, 2)]
+[(0, 2), (1, 2), (1, 2)]
+[(1, 2), (2, 2), (2, 2)]
+[(2, 2), (3, 2), (3, 2)]
+[(2, 3), (3, 3), (3, 3)]
+[(3, 3), (3, 4), (2, 3)]
+[(3, 2), (3, 3), (2, 4)]
+[(3, 1), (3, 2), (1, 4)]
+[(4, 1), (3, 1), (0, 4)]
+***********************************
+30
 
+```

@@ -159,14 +159,14 @@ def multi_can_transit(label: str, aps: list, label_cnt: dict, task_cap: dict,
 if __name__ == "__main__":
     start = time.time()
     # environment setting
-    num_r = 2
+    num_r = 3
     # hronzital
     h_obs = [(1, 1)]
-    coor_tasks = [[0, 1, "s1"]]
-    task_cap = {"s1": 2}
+    coor_tasks = [[0, 1, "s1"], [2, 2, "s2"]]
+    task_cap = {"s1": 3, "s2": 2}
     tasks_collection = [[[2, 3, "t1"], [4, 1, "t2"]],
                         [[3, 4, "t3"], [3, 1, "t4"]],
-                        [[3, 5, "t5"], [0, 5, "t6"]],
+                        [[3, 3, "t5"], [0, 4, "t6"]],
                         [[9, 4, "t7"], [2, 7, "t8"]]]
     ts_list = []
     envs = {}
@@ -181,9 +181,10 @@ if __name__ == "__main__":
     pts = product_ts(ts_list, envs)
     print(f"PTS finish. #nodes: {len(pts)}. {time.time()-start}s.")
     # show_ts(pts)
-    local_formula = ["(F t1) && (F t2)",
-                     "(F t3) && (F t4)"]
-    c_formula = "F s1"
+    local_formula = ["(F(t1 && (F t2)))",
+                     "(F(t3 && (F t4)))",
+                     "(F(t5 && (F t6)))"]
+    c_formula = "(F s1) && (F s2)"
     local_formula.append(c_formula)
     # local task specification
     formula = ' && '.join(local_formula)
@@ -214,13 +215,21 @@ if __name__ == "__main__":
 
     # plot results
     print(min_cost)
+    
     ts_path = []
     for node in path:
         ts_node = pa.nodes[node]["ts"]
         print(ts_node)
         ts_path.append(pts.nodes[ts_node]["pos"])
     print("***********************************")
+    overall_time = (len(path) - 1) * num_r
+    print(overall_time)
     # # T_pa = time.time()
+    
+    # how to compute the actual overall time
+    # the other robot may wait for the last robot to come to coor place.
+    # if last pos not in c_pos, then just count the non-repeated seq
+    # if last pos in c_pos, then 
 
     # ## environment setting
     # num_r = 4
